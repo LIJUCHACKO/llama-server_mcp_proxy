@@ -260,50 +260,110 @@ const safeEnd = (res) => {
 const server = http.createServer(async (req, res) => {
     log.info(`Incoming request: ${req.method} ${req.url}`);
 
-    // --- Proxy non-chat requests directly (Keep Original Logic) ---
+    // --- Proxy non-chat requests directly ---
     if (!(req.method === 'POST' && req.url === '/v1/chat/completions')) {
         try {
             const serverUrl = new URL(CONFIG.LLAMA_SERVER_URL);
-             log.info(`Proxying non-chat request to ${CONFIG.LLAMA_SERVER_URL}`);
-            const options = {
+            log.info(`Proxying non-chat request: ${req.method} ${req.url} to ${CONFIG.LLAMA_SERVER_URL}`); // Changed log message
+
+            // Determine Content-Length and Content-Type for non-chat requests
+            let contentLength = '0'; // Default for GET, DELETE, HEAD
+            let contentType = req.headers['content-type']; // Use original if present
+
+            if (req.method === 'POST' || req.method === 'PUT') { // For methods that can have a body
+                if (req.headers['content-length']) {
+                    contentLength = req.headers['content-length'];
+                } else {
+                    // If no content-length, it might be chunked or the client didn't send it.
+                    // llama-server might require it or handle chunked encoding.
+                    // For simplicity, if it's not a GET/HEAD/DELETE and no length, remove it
+                    // and let Node's http.request handle it (e.g. if piping a body).
+                    
+                    log.warn(`Non-chat ${req.method} request without 'content-length' header. Proxying as is.`);
+                }
+            } else { // For GET, HEAD, DELETE, etc.
+                contentType = undefined; // Typically no Content-Type for GET/HEAD/DELETE requests with no body
+            }
+
+
+            const proxyRequestOptions = { // Renamed 'options' to avoid conflict if 'options' is used later
                 hostname: serverUrl.hostname,
                 port: serverUrl.port,
                 path: req.url,
                 method: req.method,
                 headers: {
-                    // ONLY essentials, do not forward req.headers
-                    'Content-Type': 'application/json',
-                    'Host': serverUrl.host,
-                    'Content-Length': Buffer.byteLength(currentRequestDataString),
-                    'User-Agent': 'mcp-proxy', // Simple UA
-                    // OMIT 'Accept: text/event-stream' for this test too
+                    // Forward most headers from the original request
+                    ...req.headers,
+                    // Override/set specific headers for the proxy request
+                    'Host': serverUrl.host, // Crucial: set Host to the target server
+                    'Content-Length': contentLength, // Set calculated or original content length
+                    'User-Agent': 'mcp-proxy', // Set your proxy's user agent
+                    // Remove or ensure proper handling of connection-specific headers
+                    'connection': undefined, // Let Node manage the connection
+                    'upgrade': undefined,
+                    // 'accept-encoding': undefined, // Optional: request plain response if llama-server gzipping is an issue
                 },
                 protocol: serverUrl.protocol
             };
-            log.info(`Loop #${loopCount}: Using ULTRA MINIMAL headers:`, options.headers);
-            const proxyReq = (serverUrl.protocol === 'https:' ? https : http).request(options, (proxyRes) => {
-                log.info(`Proxy response: ${proxyRes.statusCode}`);
-                res.writeHead(proxyRes.statusCode, proxyRes.headers);
+
+            if (contentType) {
+                proxyRequestOptions.headers['Content-Type'] = contentType;
+            } else {
+                delete proxyRequestOptions.headers['content-type']; // Remove if not applicable
+            }
+            
+            // Clean up any headers that became undefined
+            Object.keys(proxyRequestOptions.headers).forEach(key => {
+                if (proxyRequestOptions.headers[key] === undefined) {
+                    delete proxyRequestOptions.headers[key];
+                }
+            });
+
+            log.info(`Proxying non-chat request with headers:`, proxyRequestOptions.headers); // Corrected log message
+
+            const proxyReq = (serverUrl.protocol === 'https:' ? https : http).request(proxyRequestOptions, (proxyRes) => {
+                log.info(`Proxy response for non-chat request ${req.url}: ${proxyRes.statusCode}`);
+                // Forward headers from proxyRes to client, excluding problematic ones
+                const clientResHeaders = { ...proxyRes.headers };
+                delete clientResHeaders['transfer-encoding']; // Let Node handle client-side chunking if needed
+                delete clientResHeaders['connection'];       // Hop-by-hop header
+             
+                res.writeHead(proxyRes.statusCode, clientResHeaders);
                 proxyRes.pipe(res, { end: true });
             });
 
             proxyReq.on('error', (error) => {
-                console.error('[Proxy Request Error] Proxy request error:', error); // Keep original console.error
-                if (!res.headersSent) res.writeHead(502);
+                console.error('[Proxy Request Error - Non-Chat] Proxy request error:', error);
+                if (!res.headersSent) res.writeHead(502, { 'Content-Type': 'application/json' });
+                // Use safeEnd if it's defined in this scope, otherwise res.end
                 if (!res.writableEnded) res.end(JSON.stringify({ error: 'Proxy Error', message: error.message }));
             });
-             proxyReq.setTimeout(CONFIG.LLAMA_SERVER_TIMEOUT, () => {
-                proxyReq.destroy();
-                log.warn(`Proxy request timed out`);
-                if (!res.headersSent) res.writeHead(504);
-                if (!res.writableEnded) res.end(JSON.stringify({ error: 'Proxy Timeout' }));
-             });
 
+            // Timeout for non-chat requests (ensure CONFIG.LLAMA_SERVER_TIMEOUT is defined or use a default)
+            const timeoutDuration = typeof CONFIG.LLAMA_SERVER_TIMEOUT === 'number' ? CONFIG.LLAMA_SERVER_TIMEOUT : 30000; // Default 30s
+            if (timeoutDuration > 0) {
+                proxyReq.setTimeout(timeoutDuration, () => {
+                    proxyReq.destroy(new Error('Proxy request for non-chat endpoint timed out'));
+                    log.warn(`Proxy request for non-chat ${req.url} timed out`);
+                    if (!res.headersSent && !res.writableEnded) {
+                        res.writeHead(504, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify({ error: 'Proxy Timeout' }));
+                    } else if (!res.writableEnded) {
+                        res.end();
+                    }
+                });
+            }
+
+            // Pipe the original request body (if any) to the proxy request
+            // For GET/HEAD, req is a readable stream but will end immediately without data, which is fine.
             req.pipe(proxyReq, { end: true });
 
         } catch (error) {
-            console.error('[Proxy Error] Error handling non-chat request:', error); // Keep original console.error
-             if (!res.headersSent) res.writeHead(500);
+            console.error('[Proxy Error - Non-Chat] Error handling non-chat request:', error);
+             if (!res.headersSent && !res.writableEnded) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+             }
+             // Use safeEnd if it's defined in this scope, otherwise res.end
              if (!res.writableEnded) res.end(JSON.stringify({ error: 'Internal Server Error', message: error.message }));
         }
         return; // Stop processing here for non-chat requests
@@ -353,7 +413,7 @@ const server = http.createServer(async (req, res) => {
                     method: 'POST', // Always POST for chat
                     // Mimic original header forwarding + Content-Length update
                     // IMPORTANT: Filter potentially problematic headers from original req.headers?
-                    // For minimum change, let's try the original approach first. Be careful if req.headers contained e.g. 'accept-encoding: gzip'
+
                     headers: {
                         ...req.headers, // Forward headers from original client request
                         'host': serverUrl.host, // Set correct host for target server

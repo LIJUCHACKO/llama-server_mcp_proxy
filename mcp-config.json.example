@@ -1,0 +1,35 @@
+{
+  "mcpServers": {
+    "brave_search": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "YOUR_KEY_HERE"
+      }
+    },
+    "memory": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "/media/vmajor/ai/code"
+      ]
+    },
+    "puppeteer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    },
+    "search1api": {
+      "command": "npx",
+      "args": ["-y", "search1api-mcp"],
+      "env": {
+        "SEARCH1API_KEY": "YOUR_KEY_HERE"
+      }
+    }
+  }
+}
