@@ -1,6 +1,7 @@
 # About this repository
 
-This repository in cloned from 'extopico/llama-server_mcp_proxy'. Changes are done in this mcp proxy server to used with Qwen 3 or Jan v1 model.
+This repository is cloned from '[extopico/llama-server_mcp_proxy](https://github.com/extopico/llama-server_mcp_proxy)'. 
+Some changes are done in this mcp proxy server to use it with Qwen 3 or Jan v1 model.
 Following llm models are working 
 - Mistral-Small-3.1-24B-Instruct
 - Qwen3-30B-A3B
@@ -15,7 +16,7 @@ Replace following files
 - replace file  'llama.cpp/tools/server/webui/src/components/ChatMessage.tsx'
 - replace file 'llama.cpp/tools/server/public/index.html.gz'
 
-Files are given in this repository
+Files are given in this repository (in folder 'Files replaced in llama.cpp' )
 
 And then recompile llama-server
 
