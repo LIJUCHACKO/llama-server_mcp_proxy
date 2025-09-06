@@ -1,7 +1,7 @@
 # About this repository
 
 This repository is cloned from '[extopico/llama-server_mcp_proxy](https://github.com/extopico/llama-server_mcp_proxy)'. 
-Some changes are done in this mcp proxy server to use it with Qwen 3 or Jan v1 model.
+Some changes are done in this llama-server_mcp_proxy  to use it with Qwen 3 or Jan v1 model.
 Following llm models are working 
 - Mistral-Small-3.1-24B-Instruct
 - Qwen3-30B-A3B
