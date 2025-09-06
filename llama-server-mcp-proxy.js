@@ -57,7 +57,7 @@ async function connectToServer(serverName, serverConfig) {
         const processEnv = { ...process.env, ...(env || {}) };
         const transport = new StdioClientTransport({ command, args, env: processEnv });
         const client = new Client({ name: `mcp-proxy-${serverName}`, version: "1.0.0" });
-        client.connect(transport);
+        await client.connect(transport);
         const toolsResult = await client.listTools();
          if (!toolsResult || !Array.isArray(toolsResult.tools)) { // Basic validation
              throw new Error(`Invalid tools response from server '${serverName}'`);
@@ -88,7 +88,8 @@ function generateMcpSystemPrompt() {
     if (mcpTools.length === 0) {
         return '';
     }
-    let prompt = 'You have access to the following tools via the Model Context Protocol:\n\n';
+    let prompt = "You are a helpful AI assistant. Your primary goal is to assist users with their questions and tasks to the best of your abilities.\nWhen responding:\n- Answer directly from your knowledge when you can\n- Be concise, clear, and helpful\n- Admit when you’re unsure rather than making things up\n\mIf tools are available to you,  always  use tools\n\nWhen using tools:\n- Use one tool at a time and wait for results\n- Use actual values as arguments, not variable names\n- Learn from each result before deciding next steps\n\nYou have access to the following tools via the Model Context Protocol:\n";
+
     const toolsByServer = {};
     mcpTools.forEach(tool => {
         toolsByServer[tool.server] = toolsByServer[tool.server] || [];
@@ -101,7 +102,8 @@ function generateMcpSystemPrompt() {
         });
     });
     // Original instruction format that worked for detection
-    prompt += 'When appropriate, use a tool call to access external information or perform actions by responding with TOOL_NAME(ARG_NAME="ARG_VALUE", ...)\n';
+       prompt += 'When appropriate, use a tool call to access external information or perform actions by responding with the call tool)\n Tool call format is\n{\n"type":"tool_call",\n"name":"<toolname>",\n"parameters":{\n"<arg1 name>":"<arg1 value>",\n"<arg2 name>" : "<arg2 value>" <..and so on>\n}\n}';
+
     return prompt;
 }
 
@@ -512,23 +514,58 @@ const server = http.createServer(async (req, res) => {
                                     const jsonData = JSON.parse(dataContent);
                                     const delta = jsonData?.choices?.[0]?.delta;
                                     const finishReason = jsonData?.choices?.[0]?.finish_reason; // Check finish reason
+                                    if (!detectedToolCall) {
+		                            if (!safeWrite(res, line + '\n')) {
+		                                responseEndedWithError = true; // Stop if write fails
+		                                log.warn("safeWrite: write fails")
+		                                break;
+		                            }
+                                        
+                                    }
 
                                     if (delta?.content) {
                                         accumulatedAssistantContent += delta.content;
 
                                         // Use original regex for tool detection
-                                        const toolCallMatch = accumulatedAssistantContent.match(/(\w+(?:_\w+)*)\(([^)]*)\)/); // Simpler regex used in original
+                                        //const toolCallMatch = accumulatedAssistantContent.match(/(\w+(?:_\w+)*)\(([^)]*)\)/); // Simpler regex used in original
 
+                                        //tool calling format of Qwen3-30B-A3B-Q6_K
+                                        ////////////////////////////////////////
+                                        //{
+                                        //"type": "tool_call",
+                                        //"name": "getCurrentTime",
+                                        //"parameters": {}
+                                        //}
+                                        ///////////////////////////////
+                                        const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type": \s*"tool_call",\s*("tool"|"tool_name"|"name"):\s*"([^"]+)",\s*"parameters":\s*\{([\s\S]*?)\s*\}\s*\})/);
+                                        //log.info("accumulatedAssistantContent: " ,accumulatedAssistantContent)
                                         if (toolCallMatch && !detectedToolCall) {
+                                            // The best and most reliable way to handle JSON in JavaScript is to parse it.
                                             log.info("[Tool Call Detected] Pattern:", toolCallMatch[0]);
+                                            const data = JSON.parse(toolCallMatch[0]);
+                                            // Extract the tool_name
+                                            let toolName = data.tool;
+                                            if(!toolName) {
+                                                toolName = data.tool_name;
+                                            }
+                                            if(!toolName) {
+                                                toolName = data.name;
+                                            }
+                                            // Extract the parameters object
+                                            const parameters = data.parameters;
+
+
 
                                             // Parse args (use original simple parser)
-                                            const toolName = toolCallMatch[1];
-                                            const argsString = toolCallMatch[2];
+                                            //const toolName = toolCallMatch[1];
+                                            const argsString = parameters 
                                             const args = {};
-                                            const argMatches = argsString.matchAll(/(\w+)=["']?([^,"']+)["']?/g);
-                                            for (const argMatch of argMatches) {
-                                                args[argMatch[1]] = argMatch[2];
+
+                                            // Loop through the parameters and add them to our object
+                                            for (const key in parameters) {
+                                                if (Object.hasOwnProperty.call(parameters, key)) {
+                                                    args[key] = parameters[key];
+                                                }
                                             }
                                             log.info(`[Parsed Tool Call] Tool: ${toolName}, Args:`, args);
 
@@ -557,12 +594,7 @@ const server = http.createServer(async (req, res) => {
 
 
                                     // --- Forward chunk to client IF no tool call detected yet ---
-                                    if (!detectedToolCall) {
-                                        if (!safeWrite(res, line + '\n')) {
-                                             responseEndedWithError = true; // Stop if write fails
-                                             break;
-                                        }
-                                    }
+
 
                                 } catch (parseError) {
                                     log.warn("Failed to parse SSE JSON data:", parseError, "Line:", dataContent);
@@ -593,6 +625,10 @@ const server = http.createServer(async (req, res) => {
                         log.info(`Executing detected tool call: ${detectedToolCall.name}`);
                         try {
                             const toolResultString = await handleToolCall(detectedToolCall);
+                            if (toolResultString.length<200){
+                                const toolresult= { id: `tool_limit_${Date.now()}`, choices: [{ index: 0, delta: { content: `\n\n[Tool Call] Result from MCP tool  : ${toolResultString.substring(0, 200)}...] \n\n` } }] };
+                                safeWrite(res, `data: ${JSON.stringify(toolresult)}\n\n`);
+                            }
 
                             // Append assistant message (partial response before tool call)
                             conversationMessages.push({
