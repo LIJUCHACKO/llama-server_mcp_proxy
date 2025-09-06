@@ -1,6 +1,11 @@
 # About this repository
 
-This repository in cloned from 'extopico/llama-server_mcp_proxy'. Changes are done to use the proxy server with Qwen 3 or Jan v1 model. 
+This repository in cloned from 'extopico/llama-server_mcp_proxy'. Changes are done in this mcp proxy server to used with Qwen 3 or Jan v1 model.
+Following llm models are working 
+- Mistral-Small-3.1-24B-Instruct
+- Qwen3-30B-A3B
+- Jan-v1-4B
+- Qwen3-8B
 
 llama-server doesnot support more than one `<think> </think> ` . Some changes have to be done in llama.cpp source code for llama-server.
 
