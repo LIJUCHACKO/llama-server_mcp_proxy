@@ -1,3 +1,19 @@
+# About this repository
+
+This repository in cloned from 'extopico/llama-server_mcp_proxy'. Changes are done to use the proxy server with Qwen 3 or Jan v1 model. 
+
+llama-server doesnot support more than one `<think> </think> ` . Some changes have to be done in llama.cpp source code for llama-server.
+
+## Additional changes done in llama.cpp -server
+
+Replace following files
+- replace file  'llama.cpp/tools/server/webui/src/components/ChatMessage.tsx'
+- replace file 'llama.cpp/tools/server/public/index.html.gz'
+
+Files are given in this repository
+
+And then recompile llama-server
+
 # Llama-Server MCP Proxy
 
 This Node.js application acts as a proxy server for `llama-server`. Its primary purpose is to intercept chat completion requests, enhance them with tool capabilities via the Model Context Protocol (MCP), and allow the Language Model (LLM) to use these tools iteratively.
@@ -177,21 +193,17 @@ It proxies standard `llama-server` GUI requests (like fetching the main page) di
 
 The proxy attempts to recognize tool calls in the LLM's output in two primary formats after the LLM finishes its current response segment (indicated by `[DONE]`):
 
-1.  **Simple Function Style:**
-    ```    tool_name(param1="value1", param2="value2")
+1.  **Function Style:**
     ```
-    Example: `news(query="latest AI research", max_results=3)`
+    {
+        "type": "tool_call",
+         "name": "getCurrentTime",
+          "parameters": { "arg1": "arg1 value", "arg2" : "arg2 value".. }
+    }
+    ```
 
-2.  **XML Style:**
-    ```xml
-    <tool_call>
-        <tool>tool_name</tool>
-        <params>
-            <param1>value1</param1>
-            <param2>value2</param2>
-        </params>
-    </tool_call>
-    ```
+
+   
 
 The proxy will parse the arguments accordingly for each format.
 
