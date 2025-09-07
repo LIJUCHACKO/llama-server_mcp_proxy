@@ -96,9 +96,33 @@ function generateMcpSystemPrompt() {
         toolsByServer[tool.server].push(tool);
     });
     Object.entries(toolsByServer).forEach(([server, tools]) => {
-        prompt += `From server: ${server}\n\n`;
+        prompt += `# From server: ${server}\n\n`;
         tools.forEach(tool => {
-            prompt += `${tool.name} - ${tool.description}\n\n`;
+            prompt += `${tool.name} - ${tool.description}\n`;
+
+            //also including parameter details
+            if (tool.inputSchema && tool.inputSchema.properties) {
+                prompt += `Parameters:`;
+                if(tool.inputSchema.properties==undefined || Object.keys(tool.inputSchema.properties).length==0){
+                    prompt += `(no Parameters)`;
+                }
+                prompt += `\n`;
+
+                for (const paramName in tool.inputSchema.properties) {
+                    const paramDetails = tool.inputSchema.properties[paramName];
+                    prompt += `  - ${paramName}`
+                    if (tool.inputSchema.required.includes(paramName)){
+                        prompt += ` (required)`;
+                    }
+                    prompt += `: Type=${paramDetails.type}`
+                    if(paramDetails.description!=undefined){
+                        prompt += `, Description=${paramDetails.description}`;
+                    }
+                    prompt += `\n`;
+                }
+            }
+
+            prompt += `\n`;
         });
     });
     // Original instruction format that worked for detection
