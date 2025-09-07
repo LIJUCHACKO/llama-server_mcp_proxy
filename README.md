@@ -1,12 +1,13 @@
 # About this repository
 
-This repository is cloned from '[extopico/llama-server_mcp_proxy](https://github.com/extopico/llama-server_mcp_proxy)'. 
-Some changes are done in this llama-server_mcp_proxy  to use it with Qwen 3 or Jan v1 model.
+This repository is a fork '[extopico/llama-server_mcp_proxy](https://github.com/extopico/llama-server_mcp_proxy)'. 
+Some modification was done in toolcalling format.
 Following llm models are working 
 - Mistral-Small-3.1-24B-Instruct
 - Qwen3-30B-A3B
 - Jan-v1-4B
 - Qwen3-8B
+- deepseek-r1-distill-qwen-32b
 
 llama-server doesnot support more than one `<think> </think> ` . Some changes have to be done in llama.cpp source code for llama-server.
 
