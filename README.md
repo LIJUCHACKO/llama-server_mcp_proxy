@@ -13,8 +13,17 @@ llama-server doesnot support more than one `<think> </think> ` . Some changes ha
 
 ## Additional changes done in llama.cpp -server
 
+### For version b6431
+
 Replace following files
 - replace file  'llama.cpp/tools/server/webui/src/components/ChatMessage.tsx'
+- replace file 'llama.cpp/tools/server/public/index.html.gz'
+
+
+### For version b6527
+
+Replace following files
+- replace file  'llama.cpp/tools/server/webui/src/lib/services/chat.ts'
 - replace file 'llama.cpp/tools/server/public/index.html.gz'
 
 Files are given in this repository (in folder 'Files replaced in llama.cpp' )
