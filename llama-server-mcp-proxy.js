@@ -787,7 +787,7 @@ const shutdown = (signal) => {
     }, 10000);
 };
 process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGTERM', () => shutdown('SIGTERM')); //comment this if you want to run this in the background after closing the terminal
 process.on('uncaughtException', (err, origin) => {
     console.error(`Uncaught Exception at: ${origin}`, err); // Keep original console.error
     cleanup();
