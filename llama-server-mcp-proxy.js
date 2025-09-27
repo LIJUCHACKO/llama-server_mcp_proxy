@@ -561,7 +561,7 @@ const server = http.createServer(async (req, res) => {
                                         //"parameters": {}
                                         //}
                                         ///////////////////////////////
-                                        const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type": \s*"tool_call",\s*("tool"|"tool_name"|"name"):\s*"([^"]+)",\s*"parameters":\s*\{([\s\S]*?)\s*\}\s*\})/);
+                                        const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type"\s*:\s*"tool_call",\s*("tool"|"tool_name"|"name")\s*:\s*"([^"]+)"(,\s*"parameters"\s*:\s*\{([\s\S]*?)\s*\})?\s*\})/);
                                         //log.info("accumulatedAssistantContent: " ,accumulatedAssistantContent)
                                         if (toolCallMatch && !detectedToolCall) {
                                             // The best and most reliable way to handle JSON in JavaScript is to parse it.
@@ -576,19 +576,20 @@ const server = http.createServer(async (req, res) => {
                                                 toolName = data.name;
                                             }
                                             // Extract the parameters object
-                                            const parameters = data.parameters;
+                                            let parameters = data.parameters;
 
 
 
                                             // Parse args (use original simple parser)
                                             //const toolName = toolCallMatch[1];
-                                            const argsString = parameters 
+                                            //const argsString = parameters 
                                             const args = {};
-
-                                            // Loop through the parameters and add them to our object
-                                            for (const key in parameters) {
-                                                if (Object.hasOwnProperty.call(parameters, key)) {
-                                                    args[key] = parameters[key];
+                                            if(parameters){
+                                                // Loop through the parameters and add them to our object
+                                                for (const key in parameters) {
+                                                    if (Object.hasOwnProperty.call(parameters, key)) {
+                                                        args[key] = parameters[key];
+                                                    }
                                                 }
                                             }
                                             log.info(`[Parsed Tool Call] Tool: ${toolName}, Args:`, args);
