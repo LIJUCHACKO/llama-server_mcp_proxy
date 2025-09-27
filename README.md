@@ -3,7 +3,6 @@
 This repository is a fork '[extopico/llama-server_mcp_proxy](https://github.com/extopico/llama-server_mcp_proxy)'. 
 Some modification was done in toolcalling format.
 Following llm models are working 
-- Mistral-Small-3.1-24B-Instruct
 - Qwen3-30B-A3B
 - Jan-v1-4B
 - Qwen3-8B
