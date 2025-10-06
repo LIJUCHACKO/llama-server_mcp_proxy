@@ -98,7 +98,7 @@ function generateMcpSystemPrompt() {
     Object.entries(toolsByServer).forEach(([server, tools]) => {
         prompt += `# From server: ${server}\n\n`;
         tools.forEach(tool => {
-            prompt += `${tool.name} - ${tool.description}\n`;
+            prompt += `Tool: ${tool.name} ( Description:${tool.description})\n`;
 
             //also including parameter details
             if (tool.inputSchema && tool.inputSchema.properties) {
@@ -126,7 +126,7 @@ function generateMcpSystemPrompt() {
         });
     });
     // Original instruction format that worked for detection
-       prompt += 'When appropriate, use a tool call to access external information or perform actions by responding with the call tool)\n Tool call format is\n{\n"type":"tool_call",\n"name":"<toolname>",\n"parameters":{\n"<arg1 name>":"<arg1 value>",\n"<arg2 name>" : "<arg2 value>" <..and so on>\n}\n}';
+       prompt += 'When appropriate, use a tool call to access external information or perform actions by responding with the call tool)\n Tool call format is\n{\n"type":"tool_call",\n"name":"<toolname>",\n"parameters":{\n"<arg1 name>":"<arg1 value>",\n"<arg2 name>" : "<arg2 value>" <..and so on>\n}\n} ';
 
     return prompt;
 }
@@ -561,7 +561,7 @@ const server = http.createServer(async (req, res) => {
                                         //"parameters": {}
                                         //}
                                         ///////////////////////////////
-                                        const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type"\s*:\s*"tool_call",\s*("tool"|"tool_name"|"name")\s*:\s*"([^"]+)"(,\s*"parameters"\s*:\s*\{([\s\S]*?)\s*\})?\s*\})/);
+                                        const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type"\s*:\s*"tool_call",\s*("tool"|"tool_name"|"name")\s*:\s*"([^"]+)"(,\s*("parameters"|"arguments")\s*:\s*\{([\s\S]*?)\s*\})?\s*\})/);
                                         //log.info("accumulatedAssistantContent: " ,accumulatedAssistantContent)
                                         if (toolCallMatch && !detectedToolCall) {
                                             // The best and most reliable way to handle JSON in JavaScript is to parse it.
@@ -577,7 +577,9 @@ const server = http.createServer(async (req, res) => {
                                             }
                                             // Extract the parameters object
                                             let parameters = data.parameters;
-
+                                            if(!parameters) {
+                                                parameters = data.arguments;
+                                            }
 
 
                                             // Parse args (use original simple parser)
