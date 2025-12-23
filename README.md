@@ -10,7 +10,7 @@ Following llm models are working
 - granite 
 
 
-llama-server of older versions doesnot support more than one `<think> </think> `. Message from second <think>  </think> will not be displayed. Some changes have to be done in llama.cpp source code for llama-server.
+llama-server of older versions doesnot support more than one `<think> </think> `. Message from second `<think>  </think>` will not be displayed. Some changes have to be done in llama.cpp source code for llama-server.
 
 ## Additional changes done in llama.cpp -server
 
