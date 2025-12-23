@@ -7,8 +7,10 @@ Following llm models are working
 - Jan-v1-4B
 - Qwen3-8B
 - deepseek-r1-distill-qwen-32b
+- granite 
 
-llama-server doesnot support more than one `<think> </think> ` . Some changes have to be done in llama.cpp source code for llama-server.
+
+llama-server of older versions doesnot support more than one `<think> </think> `. Message from second <think>  </think> will not be displayed. Some changes have to be done in llama.cpp source code for llama-server.
 
 ## Additional changes done in llama.cpp -server
 
@@ -28,6 +30,11 @@ Replace following files
 Files are given in this repository (in folder 'Files replaced in llama.cpp' )
 
 And then recompile llama-server
+
+
+### For version b7522
+
+No modification required. llama-server merges all think blocks and all chat blocks.
 
 # Llama-Server MCP Proxy
 
