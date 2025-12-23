@@ -34,7 +34,7 @@ And then recompile llama-server
 
 ### For version b7522
 
-No modification required. llama-server merges all think blocks and all chat blocks.
+No modification required. llama-server merges all think blocks and all chat blocks separately.
 
 # Llama-Server MCP Proxy
 
