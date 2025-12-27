@@ -22,7 +22,7 @@ const CONFIG = {
     PORT: process.env.PORT || 9090,
     LLAMA_SERVER_URL: process.env.LLAMA_SERVER_URL || 'http://localhost:8080',
     MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH || path.join(__dirname, 'mcp-config.json'),
-    MAX_TOOL_LOOPS: 5, // Prevent infinite tool loops
+    MAX_TOOL_LOOPS: 10, // Prevent infinite tool loops
 };
 
 // --- Globals ---
@@ -65,6 +65,8 @@ async function connectToServer(serverName, serverConfig) {
         mcpClients[serverName] = { client, transport, tools: toolsResult.tools };
         const serverTools = toolsResult.tools.map(tool => ({ ...tool, server: serverName }));
         mcpTools.push(...serverTools);
+        //console.log("toolsResult:");
+        //console.log(mcpTools);
         console.log(`Connected to MCP server '${serverName}' with tools:`, toolsResult.tools.map(t => t.name).join(', ')); // Keep original console.log
         return client;
     } catch (error) {
@@ -215,6 +217,7 @@ async function handleToolCall(toolCall) { // toolCall = { id, name, input }
 
         // Format result to string using helper
         const resultString = formatToolResultToString(result); // Use the helper
+        console.log(`[Tool Call]  result from MCP tool '${targetToolName}':`, resultString);
         log.info(`Formatted tool result string length: ${resultString.length}`);
         log.debug("Formatted Tool Result String (first 500):", resultString.substring(0,500));
 
@@ -280,6 +283,24 @@ const safeEnd = (res) => {
     log.warn("Attempted end on already ended/destroyed stream.");
     return false;
 };
+
+// --- SSE Heartbeat (Keep connection alive during idle periods) ---
+function startSseHeartbeat(res, intervalMs = 5000) {
+    // Send comment lines per SSE spec to keep connection alive
+    const id = setInterval(() => {
+        if (res.writableEnded || res.destroyed) {
+            clearInterval(id);
+            return;
+        }
+        // Use safeWrite to avoid exceptions on closed sockets
+        safeWrite(res, ":\n\n");
+    }, intervalMs);
+    return id;
+}
+
+function stopSseHeartbeat(heartbeatId) {
+    if (heartbeatId) clearInterval(heartbeatId);
+}
 
 
 // --- Main Server Logic (Modified for Loop) ---
@@ -497,8 +518,14 @@ const server = http.createServer(async (req, res) => {
                         'Content-Type': 'text/event-stream; charset=utf-8',
                         'Cache-Control': 'no-cache',
                         'Connection': 'keep-alive',
+                        'X-Accel-Buffering': 'no', // prevent proxy buffering (e.g., nginx)
+                        'Keep-Alive': 'timeout=600, max=1000'
                         // Add CORS if needed 'Access-Control-Allow-Origin': '*',
                     });
+                    // Disable response timeouts and enable TCP keepalive
+                    try { res.setTimeout(0); } catch (_) {}
+                    try { if (res.socket) { res.socket.setKeepAlive(true); } } catch (_) {}
+                    try { res.flushHeaders && res.flushHeaders(); } catch (_) {}
                     clientResponseSentHeaders = true;
                 }
 
@@ -651,7 +678,10 @@ const server = http.createServer(async (req, res) => {
                     else if (detectedToolCall) {
                         log.info(`Executing detected tool call: ${detectedToolCall.name}`);
                         try {
+                            // Start heartbeats while waiting for tool execution to avoid idle disconnects
+                            const heartbeatId = startSseHeartbeat(res, 5000);
                             const toolResultString = await handleToolCall(detectedToolCall);
+                            stopSseHeartbeat(heartbeatId);
                             if (toolResultString.length<200){
                                 const toolresult= { id: `tool_limit_${Date.now()}`, choices: [{ index: 0, delta: { content: `\n\n[Tool Call] Result from MCP tool  : ${toolResultString.substring(0, 200)}...] \n\n` } }] };
                                 safeWrite(res, `data: ${JSON.stringify(toolresult)}\n\n`);
@@ -728,6 +758,12 @@ const server = http.createServer(async (req, res) => {
         }
     }); // end req.on('end')
 }); // end http.createServer
+
+// --- Server timeout tuning for long-lived SSE ---
+// Increase keep-alive and header timeouts to support long tool executions
+try { server.keepAliveTimeout = 600000; } catch (_) {}
+try { server.headersTimeout = 650000; } catch (_) {}
+try { server.requestTimeout = 0; } catch (_) {}
 
 
 // --- Cleanup and Startup (Keep Original) ---
