@@ -22,7 +22,7 @@ const CONFIG = {
     PORT: process.env.PORT || 9090,
     LLAMA_SERVER_URL: process.env.LLAMA_SERVER_URL || 'http://localhost:8080',
     MCP_CONFIG_PATH: process.env.MCP_CONFIG_PATH || path.join(__dirname, 'mcp-config.json'),
-    MAX_TOOL_LOOPS: 10, // Prevent infinite tool loops
+    MAX_TOOL_LOOPS: 100, // Prevent infinite tool loops
 };
 
 // --- Globals ---
@@ -588,7 +588,12 @@ const server = http.createServer(async (req, res) => {
                                         //"parameters": {}
                                         //}
                                         ///////////////////////////////
+                                        //tool calling format of LFM2-24B-A2B-Q4_K_M.gguf
+                                        // [<tool_name>(<parameter1_name>="<parameter1_value>", <parameter2_name>="<parameter2_value>",...]
+                                        /////////////////////////////
                                         const toolCallMatch = accumulatedAssistantContent.match(/(\{\s*"type"\s*:\s*"tool_call",\s*("tool"|"tool_name"|"name")\s*:\s*"([^"]+)"(,\s*("parameters"|"arguments")\s*:\s*\{([\s\S]*?)\s*\})?\s*\})/);
+                                        // LFM2 format: [<tool_name>(<param1>="<val1>", <param2>="<val2>", ...)]
+                                        const lfm2ToolCallMatch = accumulatedAssistantContent.match(/\[(\w+)\(([^)]*)\)\]/);
                                         //log.info("accumulatedAssistantContent: " ,accumulatedAssistantContent)
                                         if (toolCallMatch && !detectedToolCall) {
                                             // The best and most reliable way to handle JSON in JavaScript is to parse it.
@@ -630,10 +635,35 @@ const server = http.createServer(async (req, res) => {
                                             };
 
                                             // Optional: Send "executing" message to client
-                                            const toolStartMsg = { id: jsonData.id, choices: [{ index: 0, delta: { content: `\n\n[Executing tool: ${toolName}...]` } }] };
+                                            const toolStartMsg = { id: jsonData.id, choices: [{ index: 0, delta: { content: `\n\n[Executing tool: ${toolName}...]\n\n` } }] };
                                             safeWrite(res, `data: ${JSON.stringify(toolStartMsg)}\n\n`);
 
-                                            break; // Stop processing lines, prepare for tool execution
+                                            //break; // Stop processing lines, prepare for tool execution
+                                        } else if (lfm2ToolCallMatch && !detectedToolCall) {
+                                            // Handle LFM2 tool calling format: [tool_name(param1="val1", param2="val2", ...)]
+                                            log.info("[Tool Call Detected - LFM2] Pattern:", lfm2ToolCallMatch[0]);
+                                            const toolName = lfm2ToolCallMatch[1];
+                                            const paramsString = lfm2ToolCallMatch[2];
+                                            const args = {};
+                                            // Parse key="value" pairs from the parameter string
+                                            const paramRegex = /(\w+)\s*=\s*"([^"]*)"/g;
+                                            let paramMatch;
+                                            while ((paramMatch = paramRegex.exec(paramsString)) !== null) {
+                                                args[paramMatch[1]] = paramMatch[2];
+                                            }
+                                            log.info(`[Parsed Tool Call - LFM2] Tool: ${toolName}, Args:`, args);
+
+                                            detectedToolCall = {
+                                                id: `tool-${jsonData.id || Date.now()}`, // Use message ID or timestamp
+                                                name: toolName,
+                                                input: args
+                                            };
+
+                                            // Optional: Send "executing" message to client
+                                            const toolStartMsg = { id: jsonData.id, choices: [{ index: 0, delta: { content: `\n\n[Executing tool: ${toolName}...]\n\n` } }] };
+                                            safeWrite(res, `data: ${JSON.stringify(toolStartMsg)}\n\n`);
+
+                                           // break; // Stop processing lines, prepare for tool execution
                                         }
                                     }
 
@@ -679,11 +709,14 @@ const server = http.createServer(async (req, res) => {
                         log.info(`Executing detected tool call: ${detectedToolCall.name}`);
                         try {
                             // Start heartbeats while waiting for tool execution to avoid idle disconnects
-                            const heartbeatId = startSseHeartbeat(res, 5000);
+                            const heartbeatId = startSseHeartbeat(res, 2000);
                             const toolResultString = await handleToolCall(detectedToolCall);
                             stopSseHeartbeat(heartbeatId);
-                            if (toolResultString.length<200){
+                            if (toolResultString.length>200){
                                 const toolresult= { id: `tool_limit_${Date.now()}`, choices: [{ index: 0, delta: { content: `\n\n[Tool Call] Result from MCP tool  : ${toolResultString.substring(0, 200)}...] \n\n` } }] };
+                                safeWrite(res, `data: ${JSON.stringify(toolresult)}\n\n`);
+                            } else {
+                                const toolresult= { id: `tool_limit_${Date.now()}`, choices: [{ index: 0, delta: { content: `\n\n[Tool Call] Result from MCP tool  : ${toolResultString}] \n\n` } }] };
                                 safeWrite(res, `data: ${JSON.stringify(toolresult)}\n\n`);
                             }
 
