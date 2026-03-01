@@ -8,6 +8,7 @@ Following llm models are working
 - Qwen3-8B
 - deepseek-r1-distill-qwen-32b
 - granite-4.0-h-small-Q6 
+-  LFM2-24B-A2B-Q4_K_M
 
 
 llama-server of older versions doesnot support more than one `<think> </think> `. Message from second `<think>  </think>` will not be displayed. Some changes have to be done in llama.cpp source code for llama-server.
